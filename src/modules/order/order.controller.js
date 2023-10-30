@@ -108,7 +108,7 @@ export {
     onlinePayment, createOnlineOrder
 }
 
-async function card(e) {
+async function card(e,res) {
     let cart = await cartModel.findById(e.client_reference_id)
     if (!cart) return next(new AppError('cart not found', 404))
 
