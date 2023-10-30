@@ -72,18 +72,30 @@ const onlinePayment = catchAsyncError(async (req, res, next) => {
 
     res.json({ message: "Done", session })
 })
-// const removeProductFromOrder = catchAsyncError(async (req, res, next) => {
 
+const createOnlineOrder = catchAsyncError((request, response) => {
+    const sig = request.headers['stripe-signature'].toString()
 
-// })
+    let event;
 
-// const updateOrder = catchAsyncError(async (req, res, next) => {
+    try {
+        event = stripe.webhooks.constructEvent(request.body, sig, "whsec_5ZbAgKtGrbCZvmaz2zjyD4fcINO19Wkd");
+    } catch (err) {
+        return response.status(400).send(`Webhook Error: ${err.message}`);
+    }
 
-// })
+    // Handle the event
+    if (event.type == "checkout.session.completed") {
+        const checkoutSessionCompleted = event.data.object;
+        console.log("create order here .....");
+    } else {
+        console.log(`Unhandled event type ${event.type}`);
+    }
+})
+
 
 export {
     createCashOrder,
     getOrder, getAllOrders,
-    // ,removeProductFromOrder, updateOrder
-    onlinePayment
+    onlinePayment, createOnlineOrder
 }
