@@ -4,13 +4,17 @@ import { productModel } from '../../../db/models/product.model.js'
 import { AppError } from "../../utils/services/AppError.js"
 import { cartModel } from "../../../db/models/cart.model.js";
 import Stripe from 'stripe';
+import { userModel } from "../../../db/models/user.model.js";
 const stripe = new Stripe('sk_test_51O6fuIEcxhgvajHwbW9OzIkNDFw5cGWja9r8JfqPeYBwjvxYKBsDSk2jg7lmn9hEndJefgiMRkkgXP0a6Axz40aV00WXiGXDzw');
 
 const createCashOrder = catchAsyncError(async (req, res, next) => {
+    // 1- get cart usin cart id
     let cart = await cartModel.findById(req.params.id)
 
+    // 2- get total price or get total price after discount if there's a discount 
     let totalOrderPrice = cart.totalPriceAfterDiscount ? cart.totalPriceAfterDiscount : cart.totalPrice
 
+    // 3- place order 
     let order = new orderModel({
         user: req.user._id,
         cartItems: cart.cartItems,
@@ -18,6 +22,7 @@ const createCashOrder = catchAsyncError(async (req, res, next) => {
         shippingAddress: req.body.shippingAddress
     })
 
+    // 4- decrement in quantity & incremet in sold
     if (order) {
         let options = cart.cartItems.map((item) => ({
             updateOne: {
@@ -30,7 +35,10 @@ const createCashOrder = catchAsyncError(async (req, res, next) => {
     } else {
         return next(new AppError("order is not created", 409))
     }
+
+    // 5- clear user's cart
     await cartModel.findByIdAndDelete(req.params.id)
+    
     res.json({ message: 'Done', order })
 })
 
@@ -86,7 +94,7 @@ const createOnlineOrder = catchAsyncError((request, response) => {
 
     // Handle the event
     if (event.type == "checkout.session.completed") {
-        const checkoutSessionCompleted = event.data.object;
+        card(event.data.object)
         console.log("create order here .....");
     } else {
         console.log(`Unhandled event type ${event.type}`);
@@ -98,4 +106,37 @@ export {
     createCashOrder,
     getOrder, getAllOrders,
     onlinePayment, createOnlineOrder
+}
+
+async function card(e) {
+    let cart = await cartModel.findById(e.client_reference_id)
+    if (!cart) return next(new AppError('cart not found', 404))
+
+    let user = await userModel.findOne({ email: e.customer_email })
+
+    let order = new orderModel({
+        user: user._id,
+        cartItems: cart.cartItems,
+        totalOrderPrice: e.amount_total / 100,
+        shippingAddress: e.metadata.shippingAddress,
+        paymentMethod: "credit",
+        isPaid: true,
+        paidAt: Date.now()
+    })
+
+    if (order) {
+        let options = cart.cartItems.map(item => ({
+            updateOne: {
+                filter: { _id: item.product },
+                update: { $inc: { quantity: -item.quantity, sold: item.quantity } }
+            }
+        }))
+        await productModel.bulkWrite(options)
+        await order.save()
+        
+        await cartModel.findOneAndDelete({ user: user._id })
+        res.status(200).json({ message: 'Done', order })
+    } else {
+        return next(new AppError("order is not created", 409))
+    }
 }

@@ -31,9 +31,16 @@ const orderSchema = mongoose.Schema(
             city: String,
             street: String
         },
-        isPaid: Boolean, // for online payment
+        isPaid: { // for online payment
+            type: Boolean,
+            default: false
+        },
         paidAt: Date,
-        isDelivered: Boolean, // for cash on delivery payment
+        isDelivered: { // for cash on delivery payment
+            type: Boolean,
+            default: false
+        },
+        notes: String
     },
     { timestamps: true }
 )
